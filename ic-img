@@ -1,0 +1,122 @@
+#!/bin/bash
+
+# Verificar se o script está sendo executado como root
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Este script precisa ser executado como root. Use sudo ou execute como usuário root."
+    exit 1
+fi
+
+# Função de exibição de ajuda
+function exibir_ajuda {
+    echo "Uso:sudo $0 -s ORIGEM -d DESTINO [-c] <read|burn>"
+    echo "Copiar uma imagem de uma Raspberry Pi usando dd."
+    echo "  read           Copiar do disco de origem para o arquivo de destino"
+    echo "  burn           Copiar do arquivo de origem para o disco de destino"
+    echo "  -s ORIGEM      Caminho para o disco de origem (identificado usando 'lsblk -p')"
+    echo "  -d DESTINO     Caminho para o arquivo de destino ou disco de destino"
+    echo "  -c             Compactar o arquivo de destino usando pishrink (apenas para 'read')"
+    echo ""
+    echo "Exemplo:"
+    echo "  sudo $0 -s /dev/sdX -d /caminho/do/arquivo_de_destino.img read -c"
+    echo "  sudo $0 -s /caminho/do/arquivo_de_origem.img -d /dev/sdX burn"
+    exit 1
+}
+
+# Função de exibição de resumo
+function exibir_resumo {
+    echo "Resumo:"
+    echo "  Operação: $operacao"
+    echo "  Origem: $origem"
+    echo "  Destino: $destino"
+    if [ "$compactar" = true ]; then
+        echo "  Compactar: Sim"
+    else
+        echo "  Compactar: Não"
+    fi
+}
+
+# Variáveis de configuração
+operacao=""
+origem=""
+destino=""
+compactar=false
+
+# Verificar se o número de argumentos é correto
+if [ "$#" -lt 5 ]; then
+    exibir_ajuda
+fi
+
+# Processar os argumentos
+while getopts ":s:d:c" opt; do
+    case $opt in
+        s)
+            origem=$OPTARG
+            ;;
+        d)
+            destino=$OPTARG
+            ;;
+        c)
+            compactar=true
+            ;;
+        \?)
+            echo "Opção inválida: -$OPTARG"
+            exibir_ajuda
+            ;;
+        :)
+            echo "A opção -$OPTARG requer um argumento."
+            exibir_ajuda
+            ;;
+    esac
+done
+
+# Verificar se há uma operação especificada (read ou burn)
+if [ -z "${@:$OPTIND:1}" ]; then
+    exibir_ajuda
+else
+    operacao="${@:$OPTIND:1}"
+fi
+
+# Exibir resumo
+exibir_resumo
+
+# Solicitar confirmação do usuário
+read -p "Confirmar a execução? (s/N): " confirmacao
+if [[ ! "$confirmacao" =~ ^[Ss]$ ]]; then
+    echo "Operação cancelada pelo usuário."
+    exit 0
+fi
+
+# Executar a operação especificada
+case $operacao in
+    read)
+        if [ -z "$origem" ] || [ -z "$destino" ]; then
+            echo "As opções -s e -d são necessárias para a operação 'read'."
+            exibir_ajuda
+        fi
+
+        # Executar o comando dd
+        dd bs=4M if="$origem" of="$destino" conv=fsync status=progress
+
+        # Compactar se a opção -c foi fornecida
+        if [ "$compactar" = true ]; then
+            echo "Compactando o arquivo de destino usando pishrink..."
+            pishrink -a -v "$destino"
+            echo "Compactação concluída."
+        fi
+
+        echo "Cópia concluída para $destino."
+        ;;
+    burn)
+        if [ -z "$origem" ] || [ -z "$destino" ]; then
+            echo "As opções -s e -d são necessárias para a operação 'burn'."
+            exibir_ajuda
+        fi
+
+        # Executar o comando dd
+        dd bs=4M if="$origem" of="$destino" conv=fsync status=progress
+        echo "Cópia concluída para $destino."
+        ;;
+    *)
+        exibir_ajuda
+        ;;
+esac

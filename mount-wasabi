@@ -1,0 +1,6 @@
+#!/bin/bash
+
+sudo mkdir /mnt/2solve-wasabi
+sudo s3fs 2stoolsic /mnt/2solve-wasabi -o dbglevel=info -f -o curldbg -o url=https://s3.wasabisys.com -o passwd_file=/home/franco/Documentos/awsS3/passwd-s3fs 
+
+
