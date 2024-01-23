@@ -9,15 +9,15 @@ fi
 # Função de exibição de ajuda
 function exibir_ajuda {
     echo "Uso:sudo $0 -s ORIGEM -d DESTINO [-c] <read|burn>"
-    echo "Copiar uma imagem de uma Raspberry Pi usando dd."
+    echo "Copiar/Gravar uma imagem de uma Raspberry Pi usando dd, rpi-imager e tar."
     echo "  read           Copiar do disco de origem para o arquivo de destino"
     echo "  burn           Copiar do arquivo de origem para o disco de destino"
     echo "  -s ORIGEM      Caminho para o disco de origem (identificado usando 'lsblk -p')"
     echo "  -d DESTINO     Caminho para o arquivo de destino ou disco de destino"
-    echo "  -c             Compactar o arquivo de destino usando pishrink (apenas para 'read')"
+    echo "  -c             Compactar o arquivo de destino usando pishrink+tar (apenas para 'read')"
     echo ""
     echo "Exemplo:"
-    echo "  sudo $0 -s /dev/sdX -d /caminho/do/arquivo_de_destino.img read -c"
+    echo "  sudo $0 -s /dev/sdX -d /caminho/do/arquivo_de_destino.img -c read"
     echo "  sudo $0 -s /caminho/do/arquivo_de_origem.img -d /dev/sdX burn"
     exit 1
 }
@@ -99,8 +99,9 @@ case $operacao in
 
         # Compactar se a opção -c foi fornecida
         if [ "$compactar" = true ]; then
-            echo "Compactando o arquivo de destino usando pishrink..."
-            pishrink -a -v "$destino"
+            echo "Compactando o arquivo de destino usando pishrink+tar..."
+            pishrink -av "$destino"
+            tar -czf "$destino.tar.gz" "$destino"
             echo "Compactação concluída."
         fi
 
@@ -112,9 +113,24 @@ case $operacao in
             exibir_ajuda
         fi
 
-        # Executar o comando dd
-        dd bs=4M if="$origem" of="$destino" conv=fsync status=progress
-        echo "Cópia concluída para $destino."
+        deletar=false
+
+        if [[ $origem == *.tar.gz ]]; then
+            deletar=true
+            echo "Descompactando o arquivo de origem usando tar..."
+            tar -xzf "$origem" -C /tmp/
+            origem="/tmp/$(basename "$origem" .tar.gz).img"
+        fi
+
+        # Usar rpi-imager para gravar a imagem
+        echo "Gravando a imagem usando rpi-imager..."
+        rpi-imager --cli "$origem" "$destino"
+        echo "Gravação concluída para $destino."
+
+        # Deletar o arquivo descompactado, se solicitado
+        if [ "$deletar" = true ]; then
+            rm "$origem"
+        fi
         ;;
     *)
         exibir_ajuda
